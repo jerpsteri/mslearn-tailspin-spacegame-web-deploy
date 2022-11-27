@@ -2,7 +2,7 @@ trigger:
 - '*'
 
 pool:
-  vmImage: 'Azure VMSS Pool'
+  name: 'Azure VMSS Pool'
   demands:
   - npm
 
