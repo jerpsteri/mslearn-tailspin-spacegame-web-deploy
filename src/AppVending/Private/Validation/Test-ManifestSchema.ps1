@@ -4,7 +4,7 @@ function Test-ManifestSchema {
         Validates manifest data against the JSON schema and returns one message per violation.
     #>
     [CmdletBinding()]
-    [OutputType([string[]])]
+    [OutputType([object[]])]
     param(
         [Parameter(Mandatory)]
         [AllowNull()]

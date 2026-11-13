@@ -1,16 +1,15 @@
 # Shared helpers for the unit tests. Dot-source from BeforeAll.
 
 function Get-RepoRoot {
-    (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).ProviderPath
+    (Resolve-Path -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath '..')).ProviderPath
 }
 
 function Import-AppVendingModule {
-    Import-Module (Join-Path (Get-RepoRoot) 'src' 'AppVending' 'AppVending.psd1') -Force
+    Import-Module (Join-Path -Path (Get-RepoRoot) -ChildPath 'src' -AdditionalChildPath 'AppVending', 'AppVending.psd1') -Force
 }
 
-function New-ManifestData {
+function Get-SampleManifest {
     # A manifest that passes the schema and the default policy.
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
     param([string]$Name = 'sample-app')
 
     [ordered]@{
@@ -32,7 +31,7 @@ function Save-Manifest {
     )
 
     if (-not $FileName) { $FileName = "$($Data['name']).yaml" }
-    $folder = Join-Path $Root 'apps' $Team
+    $folder = Join-Path -Path $Root -ChildPath 'apps' -AdditionalChildPath $Team
     $null = New-Item -ItemType Directory -Path $folder -Force
     $path = Join-Path $folder $FileName
     ConvertTo-Yaml -Data $Data | Set-Content -LiteralPath $path

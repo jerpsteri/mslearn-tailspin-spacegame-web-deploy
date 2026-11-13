@@ -4,7 +4,7 @@ BeforeAll {
 
     $script:vaultId = '/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-sample/providers/Microsoft.KeyVault/vaults/kv-sample-prod'
 
-    function Get-Findings {
+    function Get-Finding {
         param([System.Collections.IDictionary]$Data, [string]$FileName, [string]$Root = (Join-Path $TestDrive ([guid]::NewGuid())))
         $path = Save-Manifest -Data $Data -Root $Root -FileName $FileName
         @(Test-AppManifest -Path $path)
@@ -14,24 +14,24 @@ BeforeAll {
 Describe 'Test-AppManifest' {
     Context 'valid manifests' {
         It 'accepts the minimal manifest' {
-            Get-Findings -Data (New-ManifestData) | Should -BeNullOrEmpty
+            Get-Finding -Data (Get-SampleManifest) | Should -BeNullOrEmpty
         }
 
         It 'accepts the sample fixture with redirect URIs, permissions and a secret' {
-            $fixture = Join-Path (Get-RepoRoot) 'tests' 'fixtures' 'apps' 'team-a' 'sample-web-app.yaml'
+            $fixture = Join-Path -Path (Get-RepoRoot) -ChildPath 'tests' -AdditionalChildPath 'fixtures', 'apps', 'team-a', 'sample-web-app.yaml'
             Test-AppManifest -Path $fixture | Should -BeNullOrEmpty
         }
 
         It 'accepts http redirect URIs on localhost' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.web = @{ redirectUris = @('http://localhost:5000/signin-oidc') }
-            Get-Findings -Data $data | Should -BeNullOrEmpty
+            Get-Finding -Data $data | Should -BeNullOrEmpty
         }
     }
 
     Context 'schema' {
         It 'rejects a file that is not valid YAML' {
-            $folder = Join-Path $TestDrive 'broken' 'apps' 'team-a'
+            $folder = Join-Path -Path $TestDrive -ChildPath 'broken' -AdditionalChildPath 'apps', 'team-a'
             $null = New-Item -ItemType Directory -Path $folder -Force
             $path = Join-Path $folder 'broken.yaml'
             Set-Content -LiteralPath $path -Value "name: [unclosed"
@@ -39,7 +39,7 @@ Describe 'Test-AppManifest' {
         }
 
         It 'rejects an empty file' {
-            $folder = Join-Path $TestDrive 'empty' 'apps' 'team-a'
+            $folder = Join-Path -Path $TestDrive -ChildPath 'empty' -AdditionalChildPath 'apps', 'team-a'
             $null = New-Item -ItemType Directory -Path $folder -Force
             $path = Join-Path $folder 'empty.yaml'
             Set-Content -LiteralPath $path -Value ''
@@ -47,111 +47,111 @@ Describe 'Test-AppManifest' {
         }
 
         It 'rejects a missing required property' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.Remove('description')
-            (Get-Findings -Data $data).Rule | Should -Contain 'schema'
+            (Get-Finding -Data $data).Rule | Should -Contain 'schema'
         }
 
         It 'rejects an unknown property' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.federatedCredentials = @()
-            (Get-Findings -Data $data).Rule | Should -Contain 'schema'
+            (Get-Finding -Data $data).Rule | Should -Contain 'schema'
         }
 
         It 'rejects a name with invalid characters' {
-            $data = New-ManifestData -Name 'Sample_App'
-            (Get-Findings -Data $data).Rule | Should -Contain 'schema'
+            $data = Get-SampleManifest -Name 'Sample_App'
+            (Get-Finding -Data $data).Rule | Should -Contain 'schema'
         }
 
         It 'rejects a malformed Key Vault resource ID' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.keyVault = @{ resourceId = 'kv-sample-prod' }
-            (Get-Findings -Data $data).Rule | Should -Contain 'schema'
+            (Get-Finding -Data $data).Rule | Should -Contain 'schema'
         }
     }
 
     Context 'policy' {
         It 'requires the file name to match the manifest name' {
-            (Get-Findings -Data (New-ManifestData) -FileName 'other.yaml').Rule | Should -Be 'file-name'
+            (Get-Finding -Data (Get-SampleManifest) -FileName 'other.yaml').Rule | Should -Be 'file-name'
         }
 
         It 'requires the manifest to be stored under apps/<team>' {
             $folder = Join-Path $TestDrive 'elsewhere'
             $null = New-Item -ItemType Directory -Path $folder -Force
             $path = Join-Path $folder 'sample-app.yaml'
-            ConvertTo-Yaml -Data (New-ManifestData) | Set-Content -LiteralPath $path
+            ConvertTo-Yaml -Data (Get-SampleManifest) | Set-Content -LiteralPath $path
             (Test-AppManifest -Path $path).Rule | Should -Be 'location'
         }
 
         It 'requires the minimum number of owners' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.owners = @('alice@contoso.com')
-            (Get-Findings -Data $data).Rule | Should -Be 'owners-minimum'
+            (Get-Finding -Data $data).Rule | Should -Be 'owners-minimum'
         }
 
         It 'rejects a sign-in audience outside the policy' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.signInAudience = 'AzureADMultipleOrgs'
-            (Get-Findings -Data $data).Rule | Should -Be 'sign-in-audience'
+            (Get-Finding -Data $data).Rule | Should -Be 'sign-in-audience'
         }
 
         It 'rejects <Uri>' -ForEach @(
             @{ Uri = 'http://app.contoso.com/signin-oidc' }
             @{ Uri = 'https://*.contoso.com/signin-oidc' }
         ) {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.web = @{ redirectUris = @($Uri) }
-            (Get-Findings -Data $data).Rule | Should -Be 'redirect-uri'
+            (Get-Finding -Data $data).Rule | Should -Be 'redirect-uri'
         }
 
         It 'applies redirect URI rules to spa and logoutUrl' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.spa = @{ redirectUris = @('http://app.contoso.com') }
             $data.web = @{ logoutUrl = 'http://app.contoso.com/out' }
-            (Get-Findings -Data $data).Rule | Should -Be @('redirect-uri', 'redirect-uri')
+            (Get-Finding -Data $data).Rule | Should -Be @('redirect-uri', 'redirect-uri')
         }
 
         It 'rejects a resource that is not on the allowlist' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.requiredResourceAccess = @(@{ resource = 'Azure Service Management'; delegated = @('user_impersonation') })
-            (Get-Findings -Data $data).Rule | Should -Be 'permission-not-allowed'
+            (Get-Finding -Data $data).Rule | Should -Be 'permission-not-allowed'
         }
 
         It 'rejects a permission that is not on the allowlist' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.requiredResourceAccess = @(@{ resource = 'Microsoft Graph'; delegated = @('User.Read'); application = @('Directory.ReadWrite.All') })
-            $findings = Get-Findings -Data $data
+            $findings = Get-Finding -Data $data
             $findings.Rule | Should -Be 'permission-not-allowed'
             $findings.Message | Should -Match 'Directory.ReadWrite.All'
         }
 
         It 'requires a Key Vault when secrets are declared' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.secrets = @(@{ name = 'backend' })
-            (Get-Findings -Data $data).Rule | Should -Be 'secret-key-vault'
+            (Get-Finding -Data $data).Rule | Should -Be 'secret-key-vault'
         }
 
         It 'limits the number of secrets' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.keyVault = @{ resourceId = $vaultId }
             $data.secrets = @(@{ name = 'a' }, @{ name = 'b' }, @{ name = 'c' })
-            (Get-Findings -Data $data).Rule | Should -Be 'secret-limit'
+            (Get-Finding -Data $data).Rule | Should -Be 'secret-limit'
         }
 
         It 'rejects duplicate secret names' {
-            $data = New-ManifestData
+            $data = Get-SampleManifest
             $data.keyVault = @{ resourceId = $vaultId }
             $data.secrets = @(@{ name = 'a' }, @{ name = 'a' })
-            (Get-Findings -Data $data).Rule | Should -Be 'secret-duplicate'
+            (Get-Finding -Data $data).Rule | Should -Be 'secret-duplicate'
         }
     }
 
     Context 'folders' {
         It 'reports every invalid file and duplicate names across teams' {
             $root = Join-Path $TestDrive 'folder'
-            $null = Save-Manifest -Data (New-ManifestData -Name 'shared-name') -Root $root -Team 'team-a'
-            $null = Save-Manifest -Data (New-ManifestData -Name 'shared-name') -Root $root -Team 'team-b'
-            $invalid = New-ManifestData -Name 'one-owner'
+            $null = Save-Manifest -Data (Get-SampleManifest -Name 'shared-name') -Root $root -Team 'team-a'
+            $null = Save-Manifest -Data (Get-SampleManifest -Name 'shared-name') -Root $root -Team 'team-b'
+            $invalid = Get-SampleManifest -Name 'one-owner'
             $invalid.owners = @('alice@contoso.com')
             $null = Save-Manifest -Data $invalid -Root $root -Team 'team-a'
 
@@ -172,7 +172,7 @@ Describe 'Test-AppManifest' {
         It 'fails when a required setting is missing' {
             $policyPath = Join-Path $TestDrive 'policy.yaml'
             Set-Content -LiteralPath $policyPath -Value "owners:`n  minimum: 2"
-            $fixture = Join-Path (Get-RepoRoot) 'tests' 'fixtures' 'apps' 'team-a' 'sample-web-app.yaml'
+            $fixture = Join-Path -Path (Get-RepoRoot) -ChildPath 'tests' -AdditionalChildPath 'fixtures', 'apps', 'team-a', 'sample-web-app.yaml'
             { Test-AppManifest -Path $fixture -PolicyPath $policyPath } | Should -Throw '*missing the required setting*'
         }
     }

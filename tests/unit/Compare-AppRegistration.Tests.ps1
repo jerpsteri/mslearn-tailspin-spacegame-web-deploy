@@ -2,7 +2,7 @@ BeforeAll {
     . (Join-Path $PSScriptRoot 'TestHelpers.ps1')
     Import-AppVendingModule
 
-    function New-State {
+    function Get-SampleState {
         @{
             DisplayName             = 'Sample App'
             Description             = 'Application used by the unit tests.'
@@ -20,7 +20,7 @@ BeforeAll {
 
 Describe 'Compare-AppRegistration' {
     It 'returns Create with every desired value when the application does not exist' {
-        InModuleScope AppVending -Parameters @{ Desired = New-State } {
+        InModuleScope AppVending -Parameters @{ Desired = Get-SampleState } {
             $result = Compare-AppRegistration -Name 'sample-app' -Desired $Desired -Actual $null
             $result.Action | Should -Be 'Create'
             $result.Changes.Property | Should -Contain 'DisplayName'
@@ -31,7 +31,7 @@ Describe 'Compare-AppRegistration' {
     }
 
     It 'returns None when desired and actual state are equal' {
-        InModuleScope AppVending -Parameters @{ Desired = New-State; Actual = New-State } {
+        InModuleScope AppVending -Parameters @{ Desired = Get-SampleState; Actual = Get-SampleState } {
             $result = Compare-AppRegistration -Name 'sample-app' -Desired $Desired -Actual $Actual
             $result.Action | Should -Be 'None'
             $result.Changes | Should -BeNullOrEmpty
@@ -39,25 +39,25 @@ Describe 'Compare-AppRegistration' {
     }
 
     It 'ignores the order of set values' {
-        $actual = New-State
+        $actual = Get-SampleState
         [array]::Reverse($actual.OwnerIds)
-        InModuleScope AppVending -Parameters @{ Desired = New-State; Actual = $actual } {
+        InModuleScope AppVending -Parameters @{ Desired = Get-SampleState; Actual = $actual } {
             (Compare-AppRegistration -Name 'sample-app' -Desired $Desired -Actual $Actual).Action | Should -Be 'None'
         }
     }
 
     It 'treats a missing scalar and an empty string as equal' {
-        $actual = New-State
+        $actual = Get-SampleState
         $actual.WebLogoutUrl = ''
-        InModuleScope AppVending -Parameters @{ Desired = New-State; Actual = $actual } {
+        InModuleScope AppVending -Parameters @{ Desired = Get-SampleState; Actual = $actual } {
             (Compare-AppRegistration -Name 'sample-app' -Desired $Desired -Actual $Actual).Action | Should -Be 'None'
         }
     }
 
     It 'reports a changed scalar with before and after values' {
-        $desired = New-State
+        $desired = Get-SampleState
         $desired.DisplayName = 'Renamed App'
-        InModuleScope AppVending -Parameters @{ Desired = $desired; Actual = New-State } {
+        InModuleScope AppVending -Parameters @{ Desired = $desired; Actual = Get-SampleState } {
             $result = Compare-AppRegistration -Name 'sample-app' -Desired $Desired -Actual $Actual
             $result.Action | Should -Be 'Update'
             $result.Changes.Count | Should -Be 1
@@ -68,9 +68,9 @@ Describe 'Compare-AppRegistration' {
     }
 
     It 'reports additions and removals of set values' {
-        $desired = New-State
+        $desired = Get-SampleState
         $desired.WebRedirectUris = @('https://sample.contoso.com/callback')
-        InModuleScope AppVending -Parameters @{ Desired = $desired; Actual = New-State } {
+        InModuleScope AppVending -Parameters @{ Desired = $desired; Actual = Get-SampleState } {
             $change = (Compare-AppRegistration -Name 'sample-app' -Desired $Desired -Actual $Actual).Changes | Where-Object Property -EQ 'WebRedirectUris'
             $change.Add | Should -Be 'https://sample.contoso.com/callback'
             $change.Remove | Should -Be 'https://sample.contoso.com/signin-oidc'
@@ -78,25 +78,25 @@ Describe 'Compare-AppRegistration' {
     }
 
     It 'compares redirect URIs case sensitively' {
-        $actual = New-State
+        $actual = Get-SampleState
         $actual.WebRedirectUris = @('https://sample.contoso.com/Signin-Oidc')
-        InModuleScope AppVending -Parameters @{ Desired = New-State; Actual = $actual } {
+        InModuleScope AppVending -Parameters @{ Desired = Get-SampleState; Actual = $actual } {
             (Compare-AppRegistration -Name 'sample-app' -Desired $Desired -Actual $Actual).Action | Should -Be 'Update'
         }
     }
 
     It 'compares identifiers case insensitively' {
-        $actual = New-State
+        $actual = Get-SampleState
         $actual.OwnerIds = $actual.OwnerIds | ForEach-Object { $_.ToUpperInvariant() }
-        InModuleScope AppVending -Parameters @{ Desired = New-State; Actual = $actual } {
+        InModuleScope AppVending -Parameters @{ Desired = Get-SampleState; Actual = $actual } {
             (Compare-AppRegistration -Name 'sample-app' -Desired $Desired -Actual $Actual).Action | Should -Be 'None'
         }
     }
 
     It 'adds missing tags and keeps tags set by other tools' {
-        $actual = New-State
+        $actual = Get-SampleState
         $actual.Tags = @('owned-by-someone-else')
-        InModuleScope AppVending -Parameters @{ Desired = New-State; Actual = $actual } {
+        InModuleScope AppVending -Parameters @{ Desired = Get-SampleState; Actual = $actual } {
             $change = (Compare-AppRegistration -Name 'sample-app' -Desired $Desired -Actual $Actual).Changes | Where-Object Property -EQ 'Tags'
             $change.Add | Should -Be 'managed-by:app-vending'
             $change.Remove | Should -BeNullOrEmpty
@@ -104,9 +104,9 @@ Describe 'Compare-AppRegistration' {
     }
 
     It 'reports a service principal that should no longer exist' {
-        $desired = New-State
+        $desired = Get-SampleState
         $desired.ServicePrincipalEnabled = $false
-        InModuleScope AppVending -Parameters @{ Desired = $desired; Actual = New-State } {
+        InModuleScope AppVending -Parameters @{ Desired = $desired; Actual = Get-SampleState } {
             $result = Compare-AppRegistration -Name 'sample-app' -Desired $Desired -Actual $Actual
             $result.Changes.Property | Should -Be 'ServicePrincipalEnabled'
         }

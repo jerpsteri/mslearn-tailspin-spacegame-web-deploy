@@ -5,13 +5,13 @@ BeforeAll {
     $script:now = [datetime]::new(2026, 1, 1, 0, 0, 0, [System.DateTimeKind]::Utc)
     $script:app = 'sample-app'
 
-    function New-Credential {
+    function Get-SampleEntraSecret {
         param([string]$KeyId, [string]$Name = 'appvending:backend', [int]$AgeDays = 10, [int]$LifetimeDays = 730)
         $start = $now.AddDays(-$AgeDays)
         [pscustomobject]@{ KeyId = $KeyId; DisplayName = $Name; StartDateTime = $start; EndDateTime = $start.AddDays($LifetimeDays) }
     }
 
-    function New-VaultSecret {
+    function Get-SampleVaultSecret {
         param([string]$KeyId, [string]$Name = 'sample-app-client-secret-backend', [bool]$Enabled = $true, [string]$App = 'sample-app')
         [pscustomobject]@{
             Name    = $Name
@@ -21,17 +21,17 @@ BeforeAll {
     }
 
     function Get-Plan {
-        param([string[]]$Declared = @('backend'), [object[]]$Credential = @(), [object[]]$VaultSecret = @())
-        InModuleScope AppVending -Parameters @{ App = $app; Declared = $Declared; Credential = $Credential; VaultSecret = $VaultSecret; Now = $now } {
-            @(Get-SecretPlan -AppName $App -DeclaredSecret $Declared -Credential $Credential -VaultSecret $VaultSecret -LifetimeDays 730 -RotateBeforeDays 30 -Now $Now)
+        param([string[]]$Declared = @('backend'), [object[]]$EntraSecret = @(), [object[]]$VaultSecret = @())
+        InModuleScope AppVending -Parameters @{ App = $app; Declared = $Declared; EntraSecret = $EntraSecret; VaultSecret = $VaultSecret; Now = $now } {
+            @(Get-SecretPlan -AppName $App -DeclaredSecret $Declared -EntraSecret $EntraSecret -VaultSecret $VaultSecret -RotateBeforeDays 30 -Now $Now)
         }
     }
 
     function Invoke-PlanSimulation {
         # Applies a plan to in-memory state the way apply does and returns the new state.
-        param([object[]]$Plan, [object[]]$Credential = @(), [object[]]$VaultSecret = @())
+        param([object[]]$Plan, [object[]]$EntraSecret = @(), [object[]]$VaultSecret = @())
 
-        $credentials = [System.Collections.Generic.List[object]]::new($Credential)
+        $credentials = [System.Collections.Generic.List[object]]::new($EntraSecret)
         $vault = [System.Collections.Generic.List[object]]::new($VaultSecret)
 
         foreach ($action in $Plan) {
@@ -41,7 +41,7 @@ BeforeAll {
                     $credentials.Add([pscustomobject]@{ KeyId = $keyId; DisplayName = "appvending:$($action.SecretName)"; StartDateTime = $now; EndDateTime = $now.AddDays(730) })
                     $existing = $vault | Where-Object Name -EQ $action.VaultSecretName
                     if ($existing) { $null = $vault.Remove($existing) }
-                    $vault.Add((New-VaultSecret -KeyId $keyId -Name $action.VaultSecretName))
+                    $vault.Add((Get-SampleVaultSecret -KeyId $keyId -Name $action.VaultSecretName))
                 }
                 'RemoveCredential' {
                     $null = $credentials.Remove(($credentials | Where-Object KeyId -EQ $action.KeyId))
@@ -52,7 +52,7 @@ BeforeAll {
             }
         }
 
-        @{ Credential = $credentials.ToArray(); VaultSecret = $vault.ToArray() }
+        @{ EntraSecret = $credentials.ToArray(); VaultSecret = $vault.ToArray() }
     }
 }
 
@@ -63,15 +63,15 @@ Describe 'Get-SecretPlan' {
         }
 
         It 'does nothing when the vault points to a valid credential outside the rotation window' {
-            Get-Plan -Credential (New-Credential -KeyId 'k1') -VaultSecret (New-VaultSecret -KeyId 'k1') | Should -BeNullOrEmpty
+            Get-Plan -EntraSecret (Get-SampleEntraSecret -KeyId 'k1') -VaultSecret (Get-SampleVaultSecret -KeyId 'k1') | Should -BeNullOrEmpty
         }
 
         It 'keeps the previous credential until it expires after a rotation' {
             $credentials = @(
-                New-Credential -KeyId 'old' -AgeDays 710
-                New-Credential -KeyId 'new' -AgeDays 5
+                Get-SampleEntraSecret -KeyId 'old' -AgeDays 710
+                Get-SampleEntraSecret -KeyId 'new' -AgeDays 5
             )
-            Get-Plan -Credential $credentials -VaultSecret (New-VaultSecret -KeyId 'new') | Should -BeNullOrEmpty
+            Get-Plan -EntraSecret $credentials -VaultSecret (Get-SampleVaultSecret -KeyId 'new') | Should -BeNullOrEmpty
         }
     }
 
@@ -85,31 +85,31 @@ Describe 'Get-SecretPlan' {
         }
 
         It 'creates every declared secret independently' {
-            $plan = Get-Plan -Declared 'backend', 'worker' -Credential (New-Credential -KeyId 'k1') -VaultSecret (New-VaultSecret -KeyId 'k1')
+            $plan = Get-Plan -Declared 'backend', 'worker' -EntraSecret (Get-SampleEntraSecret -KeyId 'k1') -VaultSecret (Get-SampleVaultSecret -KeyId 'k1')
             $plan.Count | Should -Be 1
             $plan[0].SecretName | Should -Be 'worker'
         }
 
         It 'recreates the secret when the vault secret is disabled' {
-            $plan = Get-Plan -Credential (New-Credential -KeyId 'k1') -VaultSecret (New-VaultSecret -KeyId 'k1' -Enabled $false)
+            $plan = Get-Plan -EntraSecret (Get-SampleEntraSecret -KeyId 'k1') -VaultSecret (Get-SampleVaultSecret -KeyId 'k1' -Enabled $false)
             $plan.Action | Should -Be @('CreateSecret', 'RemoveCredential')
         }
     }
 
     Context 'rotation' {
         It 'rotates when the current credential enters the rotation window' {
-            $plan = Get-Plan -Credential (New-Credential -KeyId 'k1' -AgeDays 700) -VaultSecret (New-VaultSecret -KeyId 'k1')
+            $plan = Get-Plan -EntraSecret (Get-SampleEntraSecret -KeyId 'k1' -AgeDays 700) -VaultSecret (Get-SampleVaultSecret -KeyId 'k1')
             $plan.Count | Should -Be 1
             $plan[0].Action | Should -Be 'CreateSecret'
             $plan[0].Reason | Should -Be 'Rotation'
         }
 
         It 'does not rotate one day before the rotation window' {
-            Get-Plan -Credential (New-Credential -KeyId 'k1' -AgeDays 699) -VaultSecret (New-VaultSecret -KeyId 'k1') | Should -BeNullOrEmpty
+            Get-Plan -EntraSecret (Get-SampleEntraSecret -KeyId 'k1' -AgeDays 699) -VaultSecret (Get-SampleVaultSecret -KeyId 'k1') | Should -BeNullOrEmpty
         }
 
         It 'removes an expired credential and creates a replacement' {
-            $plan = Get-Plan -Credential (New-Credential -KeyId 'k1' -AgeDays 731) -VaultSecret (New-VaultSecret -KeyId 'k1')
+            $plan = Get-Plan -EntraSecret (Get-SampleEntraSecret -KeyId 'k1' -AgeDays 731) -VaultSecret (Get-SampleVaultSecret -KeyId 'k1')
             $plan.Action | Should -Be @('CreateSecret', 'RemoveCredential')
             $plan[0].Reason | Should -Be 'Missing'
             $plan[1].Reason | Should -Be 'Expired'
@@ -118,7 +118,7 @@ Describe 'Get-SecretPlan' {
 
     Context 'interrupted runs' {
         It 'replaces a credential that never reached the vault' {
-            $plan = Get-Plan -Credential (New-Credential -KeyId 'lost')
+            $plan = Get-Plan -EntraSecret (Get-SampleEntraSecret -KeyId 'lost')
             $plan.Action | Should -Be @('CreateSecret', 'RemoveCredential')
             $plan[0].Reason | Should -Be 'Orphaned'
             $plan[1].KeyId | Should -Be 'lost'
@@ -126,10 +126,10 @@ Describe 'Get-SecretPlan' {
 
         It 'removes a newer credential the vault does not point to and rotates again' {
             $credentials = @(
-                New-Credential -KeyId 'current' -AgeDays 705
-                New-Credential -KeyId 'lost' -AgeDays 1
+                Get-SampleEntraSecret -KeyId 'current' -AgeDays 705
+                Get-SampleEntraSecret -KeyId 'lost' -AgeDays 1
             )
-            $plan = Get-Plan -Credential $credentials -VaultSecret (New-VaultSecret -KeyId 'current')
+            $plan = Get-Plan -EntraSecret $credentials -VaultSecret (Get-SampleVaultSecret -KeyId 'current')
             $plan.Action | Should -Be @('CreateSecret', 'RemoveCredential')
             $plan[0].Reason | Should -Be 'Rotation'
             $plan[1].KeyId | Should -Be 'lost'
@@ -138,15 +138,15 @@ Describe 'Get-SecretPlan' {
 
     Context 'removal' {
         It 'removes the credential and disables the vault secret when a secret is no longer declared' {
-            $plan = Get-Plan -Declared @() -Credential (New-Credential -KeyId 'k1') -VaultSecret (New-VaultSecret -KeyId 'k1')
+            $plan = Get-Plan -Declared @() -EntraSecret (Get-SampleEntraSecret -KeyId 'k1') -VaultSecret (Get-SampleVaultSecret -KeyId 'k1')
             $plan.Action | Should -Be @('RemoveCredential', 'DisableVaultSecret')
             $plan[0].Reason | Should -Be 'Undeclared'
         }
 
         It 'leaves vault secrets of other applications alone' {
             $vault = @(
-                New-VaultSecret -KeyId 'x' -Name 'sample-app-client-secret-legacy' -App 'another-app'
-                New-VaultSecret -KeyId 'y' -Name 'unrelated-secret'
+                Get-SampleVaultSecret -KeyId 'x' -Name 'sample-app-client-secret-legacy' -App 'another-app'
+                Get-SampleVaultSecret -KeyId 'y' -Name 'unrelated-secret'
             )
             Get-Plan -Declared @() -VaultSecret $vault | Should -BeNullOrEmpty
         }
@@ -161,16 +161,16 @@ Describe 'Get-SecretPlan' {
         }
 
         It 'reports a conflict when the vault secret belongs to another application' {
-            $plan = Get-Plan -VaultSecret (New-VaultSecret -KeyId 'k1' -App 'another-app')
+            $plan = Get-Plan -VaultSecret (Get-SampleVaultSecret -KeyId 'k1' -App 'another-app')
             $plan.Action | Should -Be 'Conflict'
         }
 
         It 'reports credentials created outside the pipeline without touching them' {
             $credentials = @(
-                New-Credential -KeyId 'k1'
-                New-Credential -KeyId 'manual' -Name 'created in portal'
+                Get-SampleEntraSecret -KeyId 'k1'
+                Get-SampleEntraSecret -KeyId 'manual' -Name 'created in portal'
             )
-            $plan = Get-Plan -Credential $credentials -VaultSecret (New-VaultSecret -KeyId 'k1')
+            $plan = Get-Plan -EntraSecret $credentials -VaultSecret (Get-SampleVaultSecret -KeyId 'k1')
             $plan.Count | Should -Be 1
             $plan[0].Action | Should -Be 'ReportUnmanaged'
             $plan[0].KeyId | Should -Be 'manual'
@@ -179,22 +179,22 @@ Describe 'Get-SecretPlan' {
 
     Context 'idempotency' {
         It 'produces no further changes after the plan has been applied: <Name>' -ForEach @(
-            @{ Name = 'new secret'; Declared = @('backend'); Credential = @(); Vault = @() }
-            @{ Name = 'two new secrets'; Declared = @('backend', 'worker'); Credential = @(); Vault = @() }
-            @{ Name = 'rotation'; Declared = @('backend'); Credential = @(@{ KeyId = 'k1'; AgeDays = 715 }); Vault = @(@{ KeyId = 'k1' }) }
-            @{ Name = 'interrupted run'; Declared = @('backend'); Credential = @(@{ KeyId = 'lost'; AgeDays = 0 }); Vault = @() }
-            @{ Name = 'interrupted rotation'; Declared = @('backend'); Credential = @(@{ KeyId = 'k1'; AgeDays = 715 }, @{ KeyId = 'lost'; AgeDays = 0 }); Vault = @(@{ KeyId = 'k1' }) }
-            @{ Name = 'secret removed'; Declared = @(); Credential = @(@{ KeyId = 'k1'; AgeDays = 10 }); Vault = @(@{ KeyId = 'k1' }) }
-            @{ Name = 'expired secret'; Declared = @('backend'); Credential = @(@{ KeyId = 'k1'; AgeDays = 800 }); Vault = @(@{ KeyId = 'k1' }) }
+            @{ Name = 'new secret'; Declared = @('backend'); Existing = @(); Vault = @() }
+            @{ Name = 'two new secrets'; Declared = @('backend', 'worker'); Existing = @(); Vault = @() }
+            @{ Name = 'rotation'; Declared = @('backend'); Existing = @(@{ KeyId = 'k1'; AgeDays = 715 }); Vault = @(@{ KeyId = 'k1' }) }
+            @{ Name = 'interrupted run'; Declared = @('backend'); Existing = @(@{ KeyId = 'lost'; AgeDays = 0 }); Vault = @() }
+            @{ Name = 'interrupted rotation'; Declared = @('backend'); Existing = @(@{ KeyId = 'k1'; AgeDays = 715 }, @{ KeyId = 'lost'; AgeDays = 0 }); Vault = @(@{ KeyId = 'k1' }) }
+            @{ Name = 'secret removed'; Declared = @(); Existing = @(@{ KeyId = 'k1'; AgeDays = 10 }); Vault = @(@{ KeyId = 'k1' }) }
+            @{ Name = 'expired secret'; Declared = @('backend'); Existing = @(@{ KeyId = 'k1'; AgeDays = 800 }); Vault = @(@{ KeyId = 'k1' }) }
         ) {
-            $credentials = @($Credential | ForEach-Object { New-Credential @_ })
-            $vaultSecrets = @($Vault | ForEach-Object { New-VaultSecret @_ })
+            $credentials = @($Existing | ForEach-Object { Get-SampleEntraSecret @_ })
+            $vaultSecrets = @($Vault | ForEach-Object { Get-SampleVaultSecret @_ })
 
-            $first = Get-Plan -Declared $Declared -Credential $credentials -VaultSecret $vaultSecrets
+            $first = Get-Plan -Declared $Declared -EntraSecret $credentials -VaultSecret $vaultSecrets
             $first | Should -Not -BeNullOrEmpty
 
-            $state = Invoke-PlanSimulation -Plan $first -Credential $credentials -VaultSecret $vaultSecrets
-            $second = Get-Plan -Declared $Declared -Credential $state.Credential -VaultSecret $state.VaultSecret
+            $state = Invoke-PlanSimulation -Plan $first -EntraSecret $credentials -VaultSecret $vaultSecrets
+            $second = Get-Plan -Declared $Declared -EntraSecret $state.EntraSecret -VaultSecret $state.VaultSecret
 
             $second | Should -BeNullOrEmpty
         }

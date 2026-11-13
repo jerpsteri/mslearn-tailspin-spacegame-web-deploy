@@ -23,9 +23,9 @@ function Test-AppManifest {
         [Parameter(Mandatory)]
         [string]$Path,
 
-        [string]$PolicyPath = (Join-Path $script:RepoRoot 'config' 'policy.yaml'),
+        [string]$PolicyPath = (Join-Path -Path $script:RepoRoot -ChildPath 'config' -AdditionalChildPath 'policy.yaml'),
 
-        [string]$SchemaPath = (Join-Path $script:RepoRoot 'schemas' 'app.schema.json')
+        [string]$SchemaPath = (Join-Path -Path $script:RepoRoot -ChildPath 'schemas' -AdditionalChildPath 'app.schema.json')
     )
 
     $policy = Get-AppVendingPolicy -Path $PolicyPath

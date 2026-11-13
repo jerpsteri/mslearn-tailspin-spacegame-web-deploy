@@ -43,17 +43,13 @@ function Get-SecretPlan {
         [AllowEmptyCollection()]
         [string[]]$DeclaredSecret = @(),
 
-        # Password credentials of the application: KeyId, DisplayName, StartDateTime, EndDateTime.
+        # Password credential metadata of the application: KeyId, DisplayName, StartDateTime, EndDateTime.
         [AllowEmptyCollection()]
-        [object[]]$Credential = @(),
+        [object[]]$EntraSecret = @(),
 
         # Secrets in the target vault: Name, Enabled, Tags.
         [AllowEmptyCollection()]
         [object[]]$VaultSecret = @(),
-
-        [Parameter(Mandatory)]
-        [ValidateRange(1, 3650)]
-        [int]$LifetimeDays,
 
         [Parameter(Mandatory)]
         [ValidateRange(0, 3650)]
@@ -87,8 +83,8 @@ function Get-SecretPlan {
         $tags[$script:Constants.VaultTagApp] -eq $AppName
     }
 
-    $managed = @($Credential | Where-Object { ([string]$_.DisplayName).StartsWith($prefix, [System.StringComparison]::Ordinal) })
-    $unmanaged = @($Credential | Where-Object { $_ -notin $managed })
+    $managed = @($EntraSecret | Where-Object { ([string]$_.DisplayName).StartsWith($prefix, [System.StringComparison]::Ordinal) })
+    $unmanaged = @($EntraSecret | Where-Object { $_ -notin $managed })
 
     foreach ($item in $unmanaged) {
         $reports.Add((& $newAction 'ReportUnmanaged' $null $null $item.KeyId "Credential '$($item.DisplayName)' was not created by the pipeline."))

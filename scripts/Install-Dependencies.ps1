@@ -8,7 +8,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$RequirementsPath = (Join-Path $PSScriptRoot '..' 'requirements.psd1')
+    [string]$RequirementsPath = (Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'requirements.psd1')
 )
 
 $ErrorActionPreference = 'Stop'

@@ -8,7 +8,7 @@ function Test-ManifestPolicy {
         apply can all run exactly the same checks.
     #>
     [CmdletBinding()]
-    [OutputType([pscustomobject[]])]
+    [OutputType([object[]])]
     param(
         [Parameter(Mandatory)]
         [pscustomobject]$Manifest,
