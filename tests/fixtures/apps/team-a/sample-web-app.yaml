@@ -1,0 +1,19 @@
+apiVersion: appvending/v1
+name: sample-web-app
+displayName: Sample Web App
+description: Internal web application used as a test fixture for manifest validation.
+owners:
+  - alice@contoso.com
+  - bob@contoso.com
+web:
+  redirectUris:
+    - https://sample.contoso.com/signin-oidc
+  logoutUrl: https://sample.contoso.com/signout-oidc
+requiredResourceAccess:
+  - resource: Microsoft Graph
+    delegated:
+      - User.Read
+keyVault:
+  resourceId: /subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-sample/providers/Microsoft.KeyVault/vaults/kv-sample-prod
+secrets:
+  - name: backend

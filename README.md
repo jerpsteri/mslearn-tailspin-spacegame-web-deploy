@@ -1,65 +1,87 @@
+# Entra App Registration Vending
 
-# Contributing
+Tämä repo hallitsee Microsoft Entran sovellusrekisteröintejä GitOps mallilla. Jokainen sovellusrekisteröinti kuvataan omassa manifestissaan, ja putki pitää Entran tilan manifestien mukaisena. Git on ainoa totuuden lähde, ja kaikki muutokset kulkevat pull requestin kautta.
 
-This project welcomes contributions and suggestions.  Most contributions require you to agree to a
-Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit https://cla.microsoft.com.
+## Toimintaperiaate
 
-When you submit a pull request, a CLA-bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., label, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
+* Manifesti kuvaa yhden sovellusrekisteröinnin halutun tilan. Tiedostot sijaitsevat polussa `apps/<tiimi>/<nimi>.yaml`.
+* Moottori lukee nykytilan, laskee eron haluttuun tilaan ja kirjoittaa vain muuttuneet kohdat. Toinen ajo ilman muutoksia ei kirjoita mitään.
+* Tilatiedostoa ei ole. Sovellus tunnistetaan manifestin `name` kentästä, joka tallennetaan Entraan muuttumattomana tunnisteena.
+* Client secret toimitetaan tiimin omaan Key Vaultiin. Arvo ei näy Gitissä, lokeissa eikä kommenteissa.
+* Secretin elinkaari ja kierrätys määräytyvät tiedostosta `config/policy.yaml`. Oletuksena secret on voimassa 730 päivää ja uusi luodaan 30 päivää ennen vanhan päättymistä.
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+## Toteutuksen tila
 
-## For maintainers: Updating feature branches
+Repo rakennetaan vaiheittain. Valmiina on vaihe 1.
 
-This repository uses feature branches to associate code with specific modules on Microsoft Learn. Any changes you make to the default branch will likely need to be propagated to each feature branch in this repo. A common example is when we need to update Node packages in `package.json`.
+1. Runko, schema, policy, vertailumoottori ja secretien tilakone yksikkötesteineen (valmis)
+2. CI, plan kommentti pull requestiin ja tilaus issuen kautta
+3. Putken identiteettien käyttöönotto ja deploy
+4. Toimitus Key Vaultiin ja ajastettu kierrätys
+5. Dokumentaatio kansioon `docs`
 
-Here's one way to update the remote feature branches when you make a change to the default branch. Note that this process deletes all local branches except for `main`.
+Kehittäjän muistio GitHub workflown tunnistautumisesta Azureen ilman sovellusrekisteröintiä löytyy tiedostosta `docs/notes/uami-github.md`.
 
-```bash
-# Synchronize with the remote main branch
-git checkout main
-git pull origin main
-# Delete all local branches except for main
-git branch | grep -ve "main" | xargs git branch -D
-# List all remote branches except for main
-branches=$(git branch -r 2> /dev/null | grep -ve "main" | cut -d "/" -f 2)
-# Synchronize each branch with main and push the result
-while IFS= read -r branch; do
-    # Fetch and switch to feature branch
-    git fetch origin $branch
-    git checkout $branch
-    # Ensure local environment is free of extra files
-    git clean -xdf
-    # Merge down main
-    git merge --no-ff main
-    # Break out if merge failed
-    if [ $? -ne 0 ]; then
-        break
-    fi
-    # Push update
-    git push origin $branch
-done <<< "$branches"
-# Switch back to main
-git checkout main
+## Rakenne
+
+```
+.github/              Copilotin ohjeet ja CODEOWNERS
+apps/                 Manifestit tiimeittäin
+config/               Tenantin asetukset ja policy
+docs/                 Dokumentaatio ja muistiot
+schemas/              Manifestin JSON Schema
+scripts/              Apuskriptit
+src/AppVending/       PowerShell moduuli
+  Public/             Moduulin julkiset funktiot
+  Private/            Validointi, vertailu ja secretien tilakone
+tests/                Yksikkötestit ja testiaineisto
+AGENTS.md             Ohjeet koodausagenteille
 ```
 
-# Legal Notices
+## Manifestin esimerkki
 
-Microsoft and any contributors grant you a license to the Microsoft documentation and other content
-in this repository under the [Creative Commons Attribution 4.0 International Public License](https://creativecommons.org/licenses/by/4.0/legalcode),
-see the [LICENSE](LICENSE) file, and grant you a license to any code in the repository under the [MIT License](https://opensource.org/licenses/MIT), see the
-[LICENSE-CODE](LICENSE-CODE) file.
+```yaml
+apiVersion: appvending/v1
+name: payments-api-prod
+displayName: Payments API (prod)
+description: Backend API for payment processing.
+owners:
+  - alice@contoso.com
+  - bob@contoso.com
+web:
+  redirectUris:
+    - https://payments.contoso.com/signin-oidc
+requiredResourceAccess:
+  - resource: Microsoft Graph
+    delegated:
+      - User.Read
+keyVault:
+  resourceId: /subscriptions/<tilaus>/resourceGroups/<ryhmä>/providers/Microsoft.KeyVault/vaults/<vault>
+secrets:
+  - name: backend
+```
 
-Microsoft, Windows, Microsoft Azure and/or other Microsoft products and services referenced in the documentation
-may be either trademarks or registered trademarks of Microsoft in the United States and/or other countries.
-The licenses for this project do not grant you rights to use any Microsoft names, logos, or trademarks.
-Microsoft's general trademark guidelines can be found at http://go.microsoft.com/fwlink/?LinkID=254653.
+Kaikki kentät ja niiden rajoitteet on kuvattu tiedostossa `schemas/app.schema.json`.
 
-Privacy information can be found at https://privacy.microsoft.com/en-us/
+## Paikallinen kehitys
 
-Microsoft and any contributors reserve all other rights, whether under their respective copyrights, patents,
-or trademarks, whether by implication, estoppel or otherwise.
+Vaatimuksena on PowerShell 7.4 tai uudempi. Tarvittavat moduulit ja niiden versiot on lueteltu tiedostossa `requirements.psd1`.
+
+```powershell
+./scripts/Install-Dependencies.ps1
+Invoke-Pester -Path tests
+Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+```
+
+Manifestien validointi samoilla säännöillä kuin putkessa:
+
+```powershell
+Import-Module ./src/AppVending/AppVending.psd1
+Test-AppManifest -Path apps
+```
+
+Komento ei tulosta mitään, kun kaikki manifestit ovat kunnossa. Muussa tapauksessa se palauttaa yhden rivin jokaisesta rikkeestä.
+
+## Kielikäytäntö
+
+README ja `docs` kansion sisältö kirjoitetaan suomeksi. Koodi, kommentit, manifestit, asetukset ja commit viestit kirjoitetaan englanniksi.

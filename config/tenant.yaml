@@ -1,0 +1,13 @@
+# Tenant level settings for the vending pipeline.
+# Replace the placeholder identifiers during onboarding. None of these values are secret.
+
+tenantId: 00000000-0000-0000-0000-000000000000
+
+# Client IDs of the pipeline identities created by the bootstrap scripts.
+pipeline:
+  planClientId: 00000000-0000-0000-0000-000000000000
+  applyClientId: 00000000-0000-0000-0000-000000000000
+
+# Tag written to every application the pipeline manages.
+# The pipeline never deletes an application that does not carry this tag.
+managedTag: managed-by:app-vending

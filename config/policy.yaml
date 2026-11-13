@@ -1,0 +1,39 @@
+# Guardrails evaluated for every manifest in intake, CI and apply.
+# Changes to this file require platform team approval through CODEOWNERS.
+
+owners:
+  # Minimum number of owners per application.
+  minimum: 2
+  # Allowed UPN domains. An empty list allows any domain.
+  allowedDomains: []
+
+signInAudience:
+  allowed:
+    - AzureADMyOrg
+
+redirectUris:
+  requireHttps: true
+  # Permits http://localhost and http://127.0.0.1 for local development.
+  allowLocalhost: true
+
+# API permissions an application may request without a policy change.
+permissions:
+  allowed:
+    - resource: Microsoft Graph
+      delegated:
+        - openid
+        - profile
+        - email
+        - offline_access
+        - User.Read
+      application: []
+
+secrets:
+  # Validity of a new client secret in days.
+  lifetimeDays: 730
+  # A replacement is created when the current secret has this many days left.
+  rotateBeforeDays: 30
+  # Maximum number of secrets declared per application.
+  maxPerApp: 2
+  # Handling of secrets created outside the pipeline. Only "report" is supported.
+  unmanaged: report

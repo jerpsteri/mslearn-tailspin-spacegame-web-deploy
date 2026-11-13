@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jerpsteri/mslearn-tailspin-spacegame-web-deploy/schemas/app.schema.json",
+  "title": "App registration manifest",
+  "description": "Desired state of one Microsoft Entra app registration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "name", "displayName", "description", "owners"],
+  "properties": {
+    "apiVersion": {
+      "description": "Manifest format version.",
+      "const": "appvending/v1"
+    },
+    "name": {
+      "description": "Immutable identifier of the application. Stored as uniqueName in Entra and must match the file name.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "minLength": 3,
+      "maxLength": 60
+    },
+    "displayName": {
+      "description": "Name shown in the Entra portal and on consent screens.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "description": {
+      "description": "Purpose of the application. Reviewers rely on this when assessing the request.",
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 1024
+    },
+    "owners": {
+      "description": "User principal names of the application owners.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    "signInAudience": {
+      "description": "Accounts that may sign in. Defaults to AzureADMyOrg.",
+      "enum": ["AzureADMyOrg", "AzureADMultipleOrgs"]
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "redirectUris": { "$ref": "#/$defs/redirectUris" },
+        "logoutUrl": { "$ref": "#/$defs/absoluteUri" }
+      }
+    },
+    "spa": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "redirectUris": { "$ref": "#/$defs/redirectUris" }
+      }
+    },
+    "requiredResourceAccess": {
+      "description": "API permissions the application requests. The pipeline does not grant admin consent.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resource"],
+        "properties": {
+          "resource": {
+            "description": "Display name of the resource API, for example Microsoft Graph.",
+            "type": "string",
+            "minLength": 1
+          },
+          "delegated": { "$ref": "#/$defs/permissionList" },
+          "application": { "$ref": "#/$defs/permissionList" }
+        }
+      }
+    },
+    "servicePrincipal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "description": "Whether a service principal exists for the application. Defaults to true.",
+          "type": "boolean"
+        }
+      }
+    },
+    "keyVault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resourceId"],
+      "properties": {
+        "resourceId": {
+          "description": "Azure resource ID of the team Key Vault that receives the client ID, tenant ID and secrets.",
+          "type": "string",
+          "pattern": "^/subscriptions/[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}/resourceGroups/[A-Za-z0-9._()-]{1,90}/providers/Microsoft\\.KeyVault/vaults/[A-Za-z][A-Za-z0-9-]{1,22}[A-Za-z0-9]$"
+        }
+      }
+    },
+    "secrets": {
+      "description": "Client secrets managed by the pipeline. Lifetime and rotation come from policy.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "description": "Stable key of the secret. Part of the Key Vault secret name.",
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "minLength": 1,
+            "maxLength": 30
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "absoluteUri": {
+      "type": "string",
+      "pattern": "^https?://[^\\s]+$"
+    },
+    "redirectUris": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/absoluteUri" }
+    },
+    "permissionList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

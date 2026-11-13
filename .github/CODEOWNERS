@@ -1,0 +1,5 @@
+# The platform team owns everything by default.
+* @jerpsteri
+
+# Teams own their manifests. Add one line per team folder, for example:
+# /apps/payments/ @your-org/payments
